@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ideabox</title>
+<style>
+  body { font-family: sans-serif; margin: 0; padding: 1rem; background: #111; color: #eee; }
+  .light { background: #fff; color: #000; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; }
+  .menu { cursor: pointer; font-size: 1.5rem; }
+  select, button, textarea, input { margin: 0.5rem 0; width: 100%; }
+
+
+  select {font-family: sans-serif;
+  font-size: 1.25rem; /* optional: control size */
+  color: #2b2b2b;;   /* optional: text color */
+  background:  white ; /* optional: dropdown background */
+  border: 1px solid grey; /* optional: border style */}
+  
+  option {background: var(--select-bg);
+  color: var(--select-text);}
+
+  .entry { border-bottom: 1px solid #444; padding: 0.5rem 0; cursor: pointer; }
+  .hidden { display: none; }
+  .back { cursor: pointer; color: cyan; margin-top:1rem; display:inline-block; }
+
+  #menu {max-width: 150px;
+  background: none; /* optional - for contrast */
+  padding: 1rem;     /* optional - breathing space */}
+  #menu button {width: 100%; /* so buttons fill inside that box neatly */}
+
+  h1 { color: orange; font-family: sans-serif; }
+  #headline {height: 1rem;}
+  #text {height: 5rem;}
+  #save-btn {width: auto;
+  padding: 0.5rem 1rem;
+  display: block;
+  margin-left: 0;}
+
+  :root {--card-bg: #f9f9f9;     /* very light for light mode */
+  --card-shadow: rgba(0, 0, 0, 0.1);}
+
+  @media (prefers-color-scheme: dark) {:root {
+    --card-bg: #222;        /* dark for dark mode */
+    --card-shadow: rgba(0, 0, 0, 0.5);}}
+  .light {--card-bg: #f9f9f9;
+  --card-shadow: rgba(0, 0, 0, 0.1);}
+
+  :root {--select-bg: #f9f9f9;
+  --select-text: #000;}
+  @media (prefers-color-scheme: dark) {:root {
+    --select-bg: #222;
+    --select-text: #eee;}}
+  .light {
+  --select-bg: #f9f9f9;
+  --select-text: #000;}
+
+
+
+  .card {background: var(--card-bg);
+  padding: 1rem;
+  margin: 0.5rem 0;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px var(--card-shadow);
+  cursor: pointer;}
+
+  .card h3 {margin: 0 0 0.5rem 0;
+  font-weight: bold;}
+
+  .card p {margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;}
+
+  #entries {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;}
+
+
+</style>
+</head>
+<body>
+
+<h1>Ideabox</h1>
+
+<div class="topbar">
+  <div class="menu" onclick="toggleMenu()">☰</div>
+  <select id="monthSelect" onchange="renderEntries()"></select>
+</div>
+
+<div id="menu" class="hidden">
+  <button onclick="exportData()">Export</button>
+  <button onclick="importData()">Import</button>
+  <button onclick="toggleTheme()">Toggle Dark/Light</button>
+</div>
+
+<textarea id="headline" placeholder="Headline (optional)"></textarea>
+<textarea id="text" placeholder="Your idea..."></textarea>
+<input id="tags" placeholder="Tags (comma separated)">
+<button id="save-btn" onclick="saveEntry()">Save</button>
+
+<div id="entries"></div>
+
+<div id="entryPage" class="hidden"></div>
+
+
+<script>
+let data = JSON.parse(localStorage.getItem('ideabox') || '{}');
+let currentMonth = getMonthKey(new Date());
+let darkMode = true;
+
+init();
+
+function init() {
+  populateMonthSelector();
+  renderEntries();
+}
+
+function toggleMenu() {
+  document.getElementById('menu').classList.toggle('hidden');
+}
+
+function toggleTheme() {
+  document.body.classList.toggle('light');
+}
+
+function getMonthKey(date) {
+  return date.toLocaleString('default', { month: 'short', year: 'numeric' });
+}
+
+function populateMonthSelector() {
+  const select = document.getElementById('monthSelect');
+  select.innerHTML = '';
+  const months = Object.keys(data).sort((a, b) => new Date(b) - new Date(a));
+  if (!months.includes(currentMonth) && (data[currentMonth] || []).length) months.unshift(currentMonth);
+  months.forEach(m => {
+    const option = document.createElement('option');
+    option.value = m;
+    option.textContent = m;
+    select.appendChild(option);
+  });
+  select.value = currentMonth;
+}
+
+
+function saveEntry() {
+  const h = document.getElementById('headline').value.trim();
+  const t = document.getElementById('text').value.trim();
+  const tag = document.getElementById('tags').value.trim();
+  if (!t) return;
+
+  const entry = { date: new Date().toISOString(), headline: h, text: t, tags: tag, v: 1, id: Date.now() };
+  data[currentMonth] = data[currentMonth] || [];
+  data[currentMonth].push(entry);
+  persist();
+  document.getElementById('headline').value = '';
+  document.getElementById('text').value = '';
+  document.getElementById('tags').value = '';
+  renderEntries();
+}
+
+function renderEntries() {
+  const list = data[currentMonth] || [];
+  const container = document.getElementById('entries');
+  container.innerHTML = '';
+  
+  list.slice().reverse().forEach(e => {
+    const div = document.createElement('div');
+    div.className = 'card';  // changed from 'entry' to 'card'
+    
+    let inner = '';
+    if (e.headline) inner += `<h3>${e.headline}</h3>`;
+    inner += `<p>${e.text}</p>`;
+    
+    div.innerHTML = inner;
+    div.onclick = () => viewEntry(e.id, currentMonth);
+    container.appendChild(div);
+  });
+}
+
+
+function viewEntry(id, month) {
+  const e = (data[month] || []).find(x => x.id == id);
+  if (!e) return;
+  const container = document.getElementById('entryPage');
+  container.innerHTML = `
+    <div><strong>${new Date(e.date).toDateString()}</strong></div>
+    ${e.headline ? `<h2>${e.headline}</h2>` : ''}
+    <pre>${e.text}</pre>
+    ${e.tags ? `<div><em>Tags: ${e.tags}</em></div>` : ''}
+    <div class="menu" onclick="entryMenu(${e.id},'${month}')">⋮</div>
+    <div class="back" onclick="backToHome()">← Back</div>
+  `;
+  container.classList.remove('hidden');
+  document.getElementById('entries').classList.add('hidden');
+}
+
+function entryMenu(id, month) {
+  const choice = prompt('1. See All Versions\n2. Continue\n\nEnter 1 or 2');
+  if (choice == '1') showVersions(id);
+  if (choice == '2') createRevision(id, month);
+}
+
+function showVersions(origId) {
+  let versions = [];
+  for (let m in data) {
+    data[m].forEach(e => { if(e.id == origId || e.prev == origId) versions.push({...e, m}) })
+  }
+  versions = versions.sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const html = versions.map((v,i) => `<div onclick="viewEntry(${v.id},'${v.m}')">v${i+1} - ${new Date(v.date).toDateString()}</div>`).join('');
+  document.getElementById('entryPage').innerHTML = html + `<div class="back" onclick="backToHome()">← Back</div>`;
+}
+
+function createRevision(origId, month) {
+  const e = (data[month] || []).find(x => x.id == origId);
+  if (!e) return;
+  const newEntry = { date: new Date().toISOString(), headline: '', text: '', tags: '', v: (e.v || 1)+1, id: Date.now(), prev: origId };
+  data[currentMonth] = data[currentMonth] || [];
+  data[currentMonth].push(newEntry);
+  persist();
+  viewEntry(newEntry.id, currentMonth);
+}
+
+function backToHome() {
+  document.getElementById('entryPage').classList.add('hidden');
+  document.getElementById('entries').classList.remove('hidden');
+  renderEntries();
+}
+
+function persist() {
+  localStorage.setItem('ideabox', JSON.stringify(data));
+  populateMonthSelector();
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'ideabox.json';
+  a.click();
+}
+
+function importData() {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.onchange = e => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = () => {
+      if(confirm('Replace existing data?')) {
+        data = JSON.parse(reader.result);
+        persist();
+        renderEntries();
+      }
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
+}
+</script>
+
+</body>
+</html>
